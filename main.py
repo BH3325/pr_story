@@ -20,8 +20,11 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # From GitHub App settings
 PRIVATE_KEY = base64.b64decode(os.getenv("PRIVATE_KEY")).decode("utf-8")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
+NARRATIVE_PROMPT = "You are given a pull request of git commit messages (professional tone). Convert these messages into a full story. Condense the story into a few broad main actions that can be used as prompts for a text-to-image model. Focus on intuitive metaphors. 1 action per prompt. 77 tokens max. Separately, write the accompanying story (for each prompt) for a human that communicates the metaphor of the image shown and how this contributes to the story whilst not omitting technical details. Here's the diff:\n"
+
 oa_client = OpenAI(
     api_key=OPENAI_API_KEY,
+    base_url="https://hack.funandprofit.ai/api/providers/openai/v1"
 )
 
 
@@ -120,6 +123,17 @@ async def handle_pr(payload):
 
     print(diff)
     # call openai
+    completion = oa_client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "user",
+                "content": NARRATIVE_PROMPT + diff
+            }
+        ]
+    )
+
+    print(completion.choices[0].message.content)
 
     # Endpoint for creating a comment on the PR
     url = f"https://api.github.com/repos/{repo_full_name}/issues/{pr_number}/comments"
