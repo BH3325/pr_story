@@ -77,22 +77,43 @@ async def get_installation_token(installation_id: int) -> str:
         res.raise_for_status()
         return res.json()["token"]
 
+async def get_diff(url, token):
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json"
+    }
+
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        res = await client.get(
+            url,
+            headers=headers
+        )
+        res.raise_for_status()
+        return res.text
+
 async def handle_pr(payload):
     print(f"processing PR: {payload["pull_request"]["number"]}")
     
+    installation_id = payload["installation"]["id"]
+    print(installation_id)
+
     pr_number = payload["pull_request"]["number"]
     repo_full_name = payload["repository"]["full_name"]
-    
+
+    # get diff
+    pr_url = f"https://github.com/{repo_full_name}/pull/{pr_number}.diff"
+    token = await get_installation_token(installation_id)
+    diff = await get_diff(pr_url, token)
+
+    print(diff)
+
     # Endpoint for creating a comment on the PR
     url = f"https://api.github.com/repos/{repo_full_name}/issues/{pr_number}/comments"
-    
+
     # The comment content
     comment_data = {
         "body": "yooo"
     }
-
-    installation_id = payload["installation"]["id"]
-    print(installation_id)
 
     token = await get_installation_token(installation_id)
 
