@@ -8,14 +8,22 @@ import jwt
 import base64
 import httpx
 from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
 app = FastAPI()
 
+
 APP_ID = os.getenv("APP_ID")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # From GitHub App settings
 PRIVATE_KEY = base64.b64decode(os.getenv("PRIVATE_KEY")).decode("utf-8")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+oa_client = OpenAI(
+    api_key=OPENAI_API_KEY,
+)
+
 
 @app.get("/")
 async def hello():
@@ -23,6 +31,7 @@ async def hello():
     print(sample)
 
     return {"status": "ok"}
+
 
 @app.post("/webhooks")
 async def github_webhook(
@@ -54,6 +63,7 @@ async def github_webhook(
 
     return {"status": "ok"}
 
+
 def generate_jwt() -> str:
     now = int(time.time())
     payload = {
@@ -62,6 +72,7 @@ def generate_jwt() -> str:
         'iss': APP_ID,
     }
     return jwt.encode(payload, PRIVATE_KEY, algorithm='RS256')
+
 
 async def get_installation_token(installation_id: int) -> str:
     jwt_token = generate_jwt()
@@ -77,6 +88,7 @@ async def get_installation_token(installation_id: int) -> str:
         res.raise_for_status()
         return res.json()["token"]
 
+
 async def get_diff(url, token):
     headers = {
         "Authorization": f"Bearer {token}",
@@ -91,9 +103,10 @@ async def get_diff(url, token):
         res.raise_for_status()
         return res.text
 
+
 async def handle_pr(payload):
     print(f"processing PR: {payload["pull_request"]["number"]}")
-    
+
     installation_id = payload["installation"]["id"]
     print(installation_id)
 
@@ -106,6 +119,7 @@ async def handle_pr(payload):
     diff = await get_diff(pr_url, token)
 
     print(diff)
+    # call openai
 
     # Endpoint for creating a comment on the PR
     url = f"https://api.github.com/repos/{repo_full_name}/issues/{pr_number}/comments"
@@ -118,14 +132,15 @@ async def handle_pr(payload):
     token = await get_installation_token(installation_id)
 
     # Post the comment to the PR
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-    
+    headers = {"Authorization": f"token {token}",
+               "Accept": "application/vnd.github.v3+json"
+               }
+
     response = requests.post(url, json=comment_data, headers=headers)
     if response.status_code not in (201, 200):
-        print(f"Error posting comment: {response.status_code}, {response.text}")
-        raise HTTPException(status_code=500, detail="Failed to post comment to GitHub")
+        print(
+            f"Error posting comment: {response.status_code}, {response.text}")
+        raise HTTPException(
+            status_code=500, detail="Failed to post comment to GitHub")
 
     return {"status": "ok"}
