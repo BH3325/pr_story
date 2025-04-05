@@ -15,4 +15,9 @@ dependencies = [
     "python-multipart>=0.0.20",
     "requests>=2.32.3",
     "uvicorn>=0.34.0",
+    "accelerate>=1.6.0",
+    "diffusers>=0.32.2",
+    "protobuf>=6.30.2",
+    "torch>=2.6.0",
+    "transformers>=4.50.3",
 ]

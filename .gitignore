@@ -11,3 +11,5 @@ wheels/
 
 # Env files
 .env
+
+.DS_store
