@@ -14,5 +14,5 @@ pipe = DiffusionPipeline.from_pretrained(
 prompt = "A cookie monster devouring a ‘Password’ input field, panic in UI. Style: Pixar-style 3D, vibrant, 4k, humorous lighting."
 # num_inference_steps default 50, how many denoising steps
 # guidance scale default 3, controls how closely the generated image adheres to the text prompt
-image = pipe(prompt=prompt, num_inference_steps=1, guidance_scale=3).images[0]
+image = pipe(prompt=prompt, num_inference_steps=50, guidance_scale=3).images[0]
 image.save("cookie_monster3.png")
