@@ -73,7 +73,7 @@ async def github_webhook(
     if x_github_event == "ping":
         return {"msg": "pong"}
 
-    if x_github_event == "pull_request":
+    if x_github_event == "pull_request" and payload['action'] == "opened":
         return await handle_pr(payload)
 
     return {"status": "ok"}
