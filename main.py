@@ -16,13 +16,12 @@ import asyncio
 import random
 from io import BytesIO
 from PIL import Image
+from contextlib import asynccontextmanager
 
 # local imports
 from model import generate_images
 
 load_dotenv(verbose=True, override=True)
-
-app = FastAPI()
 
 APP_ID = os.getenv("APP_ID")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # From GitHub App settings
@@ -37,6 +36,31 @@ oa_client = OpenAI(
     base_url="https://hack.funandprofit.ai/api/providers/openai/v1"
 )
 
+queue = asyncio.Queue()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Start background worker
+    worker_task = asyncio.create_task(worker())
+    yield
+    # Shutdown (optional clean-up)
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
+
+async def worker():
+    while True:
+        item = await queue.get()
+        try:
+            await handle_pr(item)
+        except Exception as e:
+            print(f"Error processing item: {e}")
+        finally:
+            queue.task_done()
+
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def hello():
@@ -74,10 +98,10 @@ async def github_webhook(
         return {"msg": "pong"}
 
     if x_github_event == "pull_request" and payload['action'] == "opened":
-        return await handle_pr(payload)
+        await queue.put(payload)
+        # return await handle_pr(payload)
 
     return {"status": "ok"}
-
 
 def generate_jwt() -> str:
     now = int(time.time())
@@ -253,8 +277,6 @@ async def handle_pr(payload):
                 f"Error posting comment: {response.status_code}, {response.text}")
             raise HTTPException(
                 status_code=500, detail="Failed to post comment to GitHub")
-
-    return {"status": "ok"}
 
 
 def create_random_image(size=(512, 512)) -> Image.Image:
