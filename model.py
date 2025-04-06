@@ -13,17 +13,9 @@ pipe = DiffusionPipeline.from_pretrained(
     variant="fp16",
 ).to(DEFAULT_DEVICE)
 
-# prompt = "A cookie monster devouring a ‘Password’ input field, panic in UI. Style: Pixar-style 3D, vibrant, 4k, humorous lighting."
-# # num_inference_steps default 50, how many denoising steps
-# # guidance scale default 3, controls how closely the generated image adheres to the text prompt
-# image = pipe(prompt=prompt, num_inference_steps=50, guidance_scale=3).images[0]
-# image.save("cookie_monster3.png")
-
 
 def generate_images(prompts):
-    # return pipe(prompt, num_inference_steps=50, guidance_scale=3).images[0]
-
-    with torch.autocast("cuda"):  # Mixed precision for speed on GPU
-        images = pipe(prompts).images
+    with torch.autocast("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"):  # Mixed precision for speed on GPU
+        images = pipe(prompts, num_inference_steps=50, guidance_scale=3).images
 
         return images

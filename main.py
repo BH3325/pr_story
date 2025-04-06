@@ -198,12 +198,12 @@ async def handle_pr(payload):
     repo_full_name = payload["repository"]["full_name"]
 
     # get diff
-    pr_url = f"https://github.com/{repo_full_name}/pull/{pr_number}.diff"
-    token = await get_installation_token(installation_id)
+    # pr_url = f"https://github.com/{repo_full_name}/pull/{pr_number}.diff"
     # diff = await get_diff(pr_url, token)
     # print(diff)
 
     # Get commit messages
+    token = await get_installation_token(installation_id)
     commit_messages = await get_pr_commits(repo_full_name, pr_number, token)
     print(commit_messages)
 
