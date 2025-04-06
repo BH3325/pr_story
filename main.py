@@ -153,20 +153,10 @@ async def generate_comment(images: List[Image.Image], captions: List[str]) -> st
     upload_tasks = [upload_to_imgur(img) for img in images]
     image_urls = await asyncio.gather(*upload_tasks)
 
-    # Build markdown in 2-column layout using raw HTML
-    markdown = "<table><tr>"
-
-    for i, (url, caption) in enumerate(zip(image_urls, captions)):
-        markdown += f"""
-        <td align="center" style="padding: 10px;">
-            <img src="{url}" width="300"/><br/>
-            <sub>{caption}</sub>
-        </td>
-        """
-        if (i + 1) % 2 == 0:
-            markdown += "</tr><tr>"
-
-    markdown += "</tr></table>"
+    markdown = ""
+    for url, caption in zip(image_urls, captions):
+        markdown += f"![{caption}]({url})\n*{caption}*\n\n"
+    
     return markdown
 
 async def handle_pr(payload):
@@ -214,13 +204,6 @@ async def handle_pr(payload):
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json"
     }
-
-    # response = requests.post(url, json=comment_data, headers=headers)
-    # if response.status_code not in (201, 200):
-    #     print(
-    #         f"Error posting comment: {response.status_code}, {response.text}")
-    #     raise HTTPException(
-    #         status_code=500, detail="Failed to post comment to GitHub")
 
     async with httpx.AsyncClient() as client:
         response = await client.post(url, json=comment_data, headers=headers)
