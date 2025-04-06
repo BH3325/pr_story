@@ -23,7 +23,7 @@ app = FastAPI()
 
 APP_ID = os.getenv("APP_ID")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # From GitHub App settings
-PRIVATE_KEY = base64.b64decode(os.getenv("PRIVATE_KEY")).decode("utf-8")
+PK = os.getenv("PK")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
 
@@ -37,6 +37,11 @@ oa_client = OpenAI(
 
 @app.get("/")
 async def hello():
+    installations = await get_installations()
+    
+    for installation in installations:
+        print(installation['id'])
+
     return { "status": "ok" }
 
 
@@ -78,8 +83,20 @@ def generate_jwt() -> str:
         'exp': now + (10 * 60),
         'iss': APP_ID,
     }
-    return jwt.encode(payload, PRIVATE_KEY, algorithm='RS256')
+    return jwt.encode(payload, base64.b64decode(PK), algorithm='RS256')
 
+
+async def get_installations():
+    url = "https://api.github.com/app/installations"
+    headers = {
+        "Authorization": f"Bearer {generate_jwt()}",
+        "Accept": "application/vnd.github+json",
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=headers)
+        response.raise_for_status()
+        return response.json()
 
 async def get_installation_token(installation_id: int) -> str:
     jwt_token = generate_jwt()
