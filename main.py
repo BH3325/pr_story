@@ -10,16 +10,19 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 # image upload and comment formatting related imports
+import json
 from typing import List
 import asyncio
 import random
 from io import BytesIO
 from PIL import Image
 
+# local imports
+from model import generate_images
+
 load_dotenv(verbose=True, override=True)
 
 app = FastAPI()
-
 
 APP_ID = os.getenv("APP_ID")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # From GitHub App settings
@@ -27,7 +30,7 @@ PK = os.getenv("PK")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
 
-NARRATIVE_PROMPT = "You are given a pull request of git commit messages (professional tone). Convert these messages into a full story. Condense the story into a few broad main actions that can be used as prompts for a text-to-image model. Focus on intuitive metaphors. 1 action per prompt. 77 tokens max. Separately, write the accompanying story (for each prompt) for a human that communicates the metaphor of the image shown and how this contributes to the story whilst not omitting technical details. Here's the diff:\n"
+NARRATIVE_PROMPT = "You are given a pull request of git commit messages (professional tone). Convert these messages into a full story. Condense the story into a few broad main actions that can be used as prompts for a text-to-image model. Focus on intuitive metaphors. 1 action per prompt. 77 tokens max. Separately, write the accompanying story (for each prompt) for a human that communicates the metaphor of the image shown and how this contributes to the story whilst not omitting technical details. Please output your results as a valid json list containing the prompt and accomanying story: [{ prompt, caption }]. I only want the list any nothing else in pure json without any additional markdown formatting. Here's the diff:\n"
 
 oa_client = OpenAI(
     api_key=OPENAI_API_KEY,
@@ -145,7 +148,9 @@ async def upload_to_imgur(image: Image.Image) -> str:
         res.raise_for_status()
         return res.json()["data"]["link"]
 
-async def generate_comment(images: List[Image.Image], captions: List[str]) -> str:
+async def generate_comment(
+        images: List[Image.Image], captions: List[str]
+) -> str:
     if len(images) != len(captions):
         raise ValueError("Each image must have a corresponding caption.")
 
@@ -187,11 +192,18 @@ async def handle_pr(payload):
 
     print(completion.choices[0].message.content)
 
+    prompts_and_captions = json.loads(completion.choices[0].message.content)
+
+    prompts = [item["prompt"] for item in prompts_and_captions]
+    captions = [item["caption"] for item in prompts_and_captions]
+
+    images = generate_images(prompts)
+
     # Endpoint for creating a comment on the PR
     url = f"https://api.github.com/repos/{repo_full_name}/issues/{pr_number}/comments"
 
     # The comment content
-    comment_body = await generate_comment([create_random_image() for _ in range(4)], [f"this is caption {i}" for i in range(4)])
+    comment_body = await generate_comment(images, captions)
 
     comment_data = {
         "body": comment_body
