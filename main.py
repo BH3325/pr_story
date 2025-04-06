@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Request, Header, HTTPException
 import hmac
 import hashlib
-import requests
 import os
 import time
 import jwt
@@ -9,6 +8,13 @@ import base64
 import httpx
 from dotenv import load_dotenv
 from openai import OpenAI
+
+# image upload and comment formatting related imports
+from typing import List
+import asyncio
+import random
+from io import BytesIO
+from PIL import Image
 
 load_dotenv()
 
@@ -19,6 +25,7 @@ APP_ID = os.getenv("APP_ID")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")  # From GitHub App settings
 PRIVATE_KEY = base64.b64decode(os.getenv("PRIVATE_KEY")).decode("utf-8")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+IMGUR_CLIENT_ID = os.getenv("IMGUR_CLIENT_ID")
 
 NARRATIVE_PROMPT = "You are given a pull request of git commit messages (professional tone). Convert these messages into a full story. Condense the story into a few broad main actions that can be used as prompts for a text-to-image model. Focus on intuitive metaphors. 1 action per prompt. 77 tokens max. Separately, write the accompanying story (for each prompt) for a human that communicates the metaphor of the image shown and how this contributes to the story whilst not omitting technical details. Here's the diff:\n"
 
@@ -30,10 +37,7 @@ oa_client = OpenAI(
 
 @app.get("/")
 async def hello():
-    sample = generate_jwt()
-    print(sample)
-
-    return {"status": "ok"}
+    return { "status": "ok" }
 
 
 @app.post("/webhooks")
@@ -106,6 +110,45 @@ async def get_diff(url, token):
         res.raise_for_status()
         return res.text
 
+async def upload_to_imgur(image: Image.Image) -> str:
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    buffer.seek(0)
+
+    headers = {
+        "Authorization": f"Client-ID {IMGUR_CLIENT_ID}"
+    }
+
+    files = {'image': buffer.getvalue()}
+
+    async with httpx.AsyncClient() as client:
+        res = await client.post("https://api.imgur.com/3/image", headers=headers, files=files)
+        res.raise_for_status()
+        return res.json()["data"]["link"]
+
+async def generate_comment(images: List[Image.Image], captions: List[str]) -> str:
+    if len(images) != len(captions):
+        raise ValueError("Each image must have a corresponding caption.")
+
+    # Upload images to Imgur
+    upload_tasks = [upload_to_imgur(img) for img in images]
+    image_urls = await asyncio.gather(*upload_tasks)
+
+    # Build markdown in 2-column layout using raw HTML
+    markdown = "<table><tr>"
+
+    for i, (url, caption) in enumerate(zip(image_urls, captions)):
+        markdown += f"""
+        <td align="center" style="padding: 10px;">
+            <img src="{url}" width="300"/><br/>
+            <sub>{caption}</sub>
+        </td>
+        """
+        if (i + 1) % 2 == 0:
+            markdown += "</tr><tr>"
+
+    markdown += "</tr></table>"
+    return markdown
 
 async def handle_pr(payload):
     print(f"processing PR: {payload["pull_request"]["number"]}")
@@ -139,22 +182,45 @@ async def handle_pr(payload):
     url = f"https://api.github.com/repos/{repo_full_name}/issues/{pr_number}/comments"
 
     # The comment content
+    comment_body = await generate_comment([create_random_image() for _ in range(4)], [f"this is caption {i}" for i in range(4)])
+
     comment_data = {
-        "body": "yooo"
+        "body": comment_body
     }
 
     token = await get_installation_token(installation_id)
 
     # Post the comment to the PR
-    headers = {"Authorization": f"token {token}",
-               "Accept": "application/vnd.github.v3+json"
-               }
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
 
-    response = requests.post(url, json=comment_data, headers=headers)
-    if response.status_code not in (201, 200):
-        print(
-            f"Error posting comment: {response.status_code}, {response.text}")
-        raise HTTPException(
-            status_code=500, detail="Failed to post comment to GitHub")
+    # response = requests.post(url, json=comment_data, headers=headers)
+    # if response.status_code not in (201, 200):
+    #     print(
+    #         f"Error posting comment: {response.status_code}, {response.text}")
+    #     raise HTTPException(
+    #         status_code=500, detail="Failed to post comment to GitHub")
 
-    return {"status": "ok"}
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, json=comment_data, headers=headers)
+        
+        if response.status_code not in (200, 201):
+            print(f"Error posting comment: {response.status_code}, {response.text}")
+            raise HTTPException(status_code=500, detail="Failed to post comment to GitHub")
+
+    return { "status": "ok" }
+
+
+def create_random_image(size=(512, 512)) -> Image.Image:
+    # Generate a random image by setting random colors for each pixel
+    image = Image.new("RGB", size)
+    pixels = image.load()
+
+    for i in range(image.width):
+        for j in range(image.height):
+            # Randomize RGB values for each pixel
+            pixels[i, j] = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
+    return image
