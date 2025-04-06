@@ -12,4 +12,7 @@ wheels/
 # Env files
 .env
 
+# Private keys
+*.pem
+
 .DS_store

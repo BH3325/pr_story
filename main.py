@@ -16,7 +16,7 @@ import random
 from io import BytesIO
 from PIL import Image
 
-load_dotenv()
+load_dotenv(verbose=True, override=True)
 
 app = FastAPI()
 
@@ -33,7 +33,6 @@ oa_client = OpenAI(
     api_key=OPENAI_API_KEY,
     base_url="https://hack.funandprofit.ai/api/providers/openai/v1"
 )
-
 
 @app.get("/")
 async def hello():
@@ -83,7 +82,10 @@ def generate_jwt() -> str:
         'exp': now + (10 * 60),
         'iss': APP_ID,
     }
-    return jwt.encode(payload, base64.b64decode(PK), algorithm='RS256')
+
+    pk = base64.b64decode(PK).decode("utf-8")
+
+    return jwt.encode(payload, pk, algorithm='RS256')
 
 
 async def get_installations():
